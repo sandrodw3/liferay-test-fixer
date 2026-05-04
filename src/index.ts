@@ -30,7 +30,10 @@ async function main() {
 
 	fs.mkdirSync(outputDir, { recursive: true })
 
-	const outputPath = path.join(outputDir, `test-failures-${date}.json`)
+	const outputPath = path.join(
+		outputDir,
+		`test-failures-${routineId}-${date}.json`
+	)
 
 	fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2))
 
