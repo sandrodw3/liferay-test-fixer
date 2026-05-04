@@ -89,20 +89,15 @@ Then iterate over the input case result IDs. **At the start of every iteration**
 date +%s > /tmp/fix-test-failures.iter-start
 ```
 
-Then fetch the failure data for the current case result ID by invoking `collect-failure-data` from the fixer root in a subshell — the parent shell stays in `${LIFERAY_PORTAL_PATH}`. The script writes the JSON snapshot under `${LIFERAY_TEST_FIXER_PATH}/output/` and prints its absolute path on stdout:
+Then fetch the failure data for the current case result ID by invoking `collect-failure-data` from the fixer root in a subshell — the parent shell stays in `${LIFERAY_PORTAL_PATH}`:
 
 ```bash
-(cd "${LIFERAY_TEST_FIXER_PATH}" && npm run --silent collect-failure-data -- "${CASE_RESULT_ID}") \
-    > /tmp/fix-test-failures.collect-stdout \
-    2> /tmp/fix-test-failures.collect-stderr
-COLLECT_EXIT=$?
+(cd "${LIFERAY_TEST_FIXER_PATH}" && npm run --silent collect-failure-data -- "${CASE_RESULT_ID}") 2> /tmp/fix.err
 ```
 
-Branch on `${COLLECT_EXIT}`:
+On success, the script writes the failure JSON to `${LIFERAY_TEST_FIXER_PATH}/output/test-failure-${CASE_RESULT_ID}-$(date +%Y-%m-%d).json`. Read that file — its fields (`name`, `type`, `errorTrace`, `lastPassSha`, `firstFailSha`) are the failure object for the rest of the iteration. `lastPassSha` and `firstFailSha` may individually be `null`; downstream steps handle the degraded ranges. Continue to step 1.
 
-- **`0`** — success. Read the absolute path from `/tmp/fix-test-failures.collect-stdout` (last `*.json` line) and parse that file as the failure object directly (no wrapper). Its fields (`name`, `type`, `errorTrace`, `lastPassSha`, `firstFailSha`) feed the rest of the iteration. `lastPassSha` and `firstFailSha` may be `null` individually — leave the downstream steps to handle those degraded ranges (they will surface as `Unresolved` if no investigation route is possible). Continue to step 1.
-- **`2`** — the supplied case result has status `PASSED`. Read the explanatory message from `/tmp/fix-test-failures.collect-stderr`. Mark the failure as `No fix needed` with `conclusion` set to that message verbatim. Append the entry (no name/type are available because no JSON was written — use `name: "case-result <CASE_RESULT_ID>"` and `type: "Unknown"` placeholders for the report row). Run the cleanup in step 10 and continue with the next case result ID.
-- **Any other non-zero exit** — fetch error. Read the message from `/tmp/fix-test-failures.collect-stderr` and mark the failure as `Unresolved` with `conclusion` set to that message (prefixed with `Failed to collect failure data: `). Use the same `name`/`type` placeholders as above. Append the entry, run the cleanup in step 10, and continue with the next case result ID.
+On failure, no JSON is written. Append a result entry with `name: "case-result <CASE_RESULT_ID>"`, `type: "Unknown"`, the message from `/tmp/fix.err` as `conclusion`, and verdict `No fix needed` when the exit code is `2` (the case is `PASSED`) or `Unresolved` otherwise. Run the cleanup in step 10 and continue with the next case result.
 
 For each failure, run steps 1–10 below. After each iteration — whether it succeeded or aborted — make sure the working tree is back on a clean `master` before starting the next one:
 
