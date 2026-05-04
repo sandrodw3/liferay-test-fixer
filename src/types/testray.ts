@@ -1,19 +1,16 @@
 export type Status = 'PASSED' | 'FAILED' | 'BLOCKED' | 'UNTESTED'
 
-export type Routine = {
+export type CaseResult = {
 	id: number
+	dueStatus: Status
+	errors?: string
+	r_buildToCaseResult_c_buildId: number
+	r_caseToCaseResult_c_caseId: number
 }
 
 export type Build = {
-	dateCreated: string
-	gitHash: string
 	id: number
-}
-
-export type CaseResult = {
-	id: number
-	errors?: string
-	r_caseToCaseResult_c_caseId: number
+	r_routineToBuilds_c_routineId: number
 }
 
 export type Case = {
@@ -37,4 +34,5 @@ export type CaseType = {
 export type History = Array<{
 	gitHash: string
 	status: Status
+	testrayRoutineId: number
 }>
