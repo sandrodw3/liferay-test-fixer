@@ -1,7 +1,7 @@
 ---
 allowed-tools: [Bash, Edit, Glob, Grep, Read, Skill, Write]
-argument-hint: '<caseResultId or JSON array of caseResultIds>'
-description: Resolve one or more Liferay test failures end-to-end against the local liferay-portal checkout pointed at by ${LIFERAY_PORTAL_PATH}. Accepts a single Testray case result ID or a JSON array of case result IDs and processes each in turn — fetching the failure data through `/collect-failure-data`, reproducing the failure, isolating the offending commit in the SHA range, iterating a fix on the test or the product code, filing a Jira ticket, committing, and opening a PR. Produces a markdown summary in the chat plus a self-contained HTML table at `output/fix-<YYYY-MM-DD>-<HHMMSS>.html` listing every test, its verdict, conclusion, resolution time, ticket and PR. Use when the user invokes /fix-test-failures with one or more Testray case result IDs.
+argument-hint: '<caseResultId> [caseResultId...]'
+description: Resolve one or more Liferay test failures end-to-end against the local liferay-portal checkout pointed at by ${LIFERAY_PORTAL_PATH}. Accepts one or more Testray case result IDs separated by whitespace and processes each in turn — fetching the failure data through `/collect-failure-data`, reproducing the failure, isolating the offending commit in the SHA range, iterating a fix on the test or the product code, filing a Jira ticket, committing, and opening a PR. Produces a markdown summary in the chat plus a self-contained HTML table at `output/fix-<YYYY-MM-DD>-<HHMMSS>.html` listing every test, its verdict, conclusion, resolution time, ticket and PR. Use when the user invokes /fix-test-failures with one or more Testray case result IDs.
 name: fix-test-failures
 ---
 
@@ -11,12 +11,7 @@ Resolve one or more test failures end-to-end. Take one or more Testray case resu
 
 ## Input
 
-`${ARGUMENTS}` is either:
-
-- A single positive integer (one Testray case result ID), or
-- A JSON array of one or more positive integers.
-
-Normalise a single integer into a one-element array internally so the rest of the workflow only needs to iterate. Abort immediately when the input does not parse to a non-empty list of positive integers.
+`${ARGUMENTS}` is one or more positive integers separated by whitespace, each one a Testray case result ID. Tokenise on whitespace into a list and abort immediately when the result is empty or any token is not a positive integer.
 
 For each case result ID, the failure data is fetched at the start of its iteration by invoking the `collect-failure-data` script (the same one `/collect-failure-data` runs). The script writes the failure object directly to `output/test-failure-<caseResultId>-<YYYY-MM-DD>.json` (no wrapper), with these fields:
 

@@ -1,6 +1,6 @@
 # Liferay Test Fixer
 
-Tooling that pulls Testray routine failures and lets Claude Code fix them end-to-end against a local `liferay-portal` checkout — reproducing each failure, identifying the offending commit, applying the fix, filing a Jira ticket, and opening a PR per resolved failure.
+Tooling that lets Claude Code fix Testray test failures end-to-end against a local `liferay-portal` checkout. Pass one or more Testray case result IDs and Claude fetches each failure's data, reproduces it, identifies the offending commit, applies the fix, files a Jira ticket, and opens a PR per resolved failure.
 
 ## 🔧 Setup
 
@@ -28,10 +28,10 @@ LIFERAY_PORTAL_PATH=<absolute-path-to-your-liferay-portal-clone>
 ### 3. Fix one or more failures
 
 ```
-/fix-test-failures <caseResultId or JSON array of caseResultIds>
+/fix-test-failures <caseResultId> [caseResultId...]
 ```
 
-Pass one Testray case result ID for a single fix, or a JSON array of case result IDs to batch several. For each case result ID Claude fetches its failure data through `/collect-failure-data` (under the hood), switches into the local `liferay-portal` checkout, reproduces the failure, identifies the offending commit in the `lastPassSha`..`firstFailSha` window, iterates a fix on the test or the product code, files a Jira ticket, commits, and opens a PR. When one failure cannot be resolved (does not reproduce locally, iteration budget exhausted, …) it is recorded as `Unresolved` with a handover summary in its conclusion, and the run continues with the next case result ID.
+Pass one or more Testray case result IDs separated by spaces. For each case result ID Claude fetches its failure data through `/collect-failure-data` (under the hood), switches into the local `liferay-portal` checkout, reproduces the failure, identifies the offending commit in the `lastPassSha`..`firstFailSha` window, iterates a fix on the test or the product code, files a Jira ticket, commits, and opens a PR. When one failure cannot be resolved (does not reproduce locally, iteration budget exhausted, …) it is recorded as `Unresolved` with a handover summary in its conclusion, and the run continues with the next case result ID.
 
 ### 4. Read the output
 
