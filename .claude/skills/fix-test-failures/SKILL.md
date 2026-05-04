@@ -1,31 +1,30 @@
 ---
 allowed-tools: [Bash, Edit, Glob, Grep, Read, Skill, Write]
-argument-hint: '<test-failure JSON or JSON array>'
-description: Resolve one or more Liferay test failures end-to-end against the local liferay-portal checkout pointed at by ${LIFERAY_PORTAL_PATH}. Accepts a single failure JSON or an array of failures and processes each in turn — reproducing the failure, isolating the offending commit in the SHA range, iterating a fix on the test or the product code, filing a Jira ticket, committing, and opening a PR. Produces a markdown summary in the chat plus a self-contained HTML table at `output/fix-<YYYY-MM-DD>-<HHMMSS>.html` listing every test, its verdict, conclusion, resolution time, ticket and PR. Use when the user invokes /fix-test-failures with one or more test failure payloads.
+argument-hint: '<caseResultId or JSON array of caseResultIds>'
+description: Resolve one or more Liferay test failures end-to-end against the local liferay-portal checkout pointed at by ${LIFERAY_PORTAL_PATH}. Accepts a single Testray case result ID or a JSON array of case result IDs and processes each in turn — fetching the failure data through `/collect-failure-data`, reproducing the failure, isolating the offending commit in the SHA range, iterating a fix on the test or the product code, filing a Jira ticket, committing, and opening a PR. Produces a markdown summary in the chat plus a self-contained HTML table at `output/fix-<YYYY-MM-DD>-<HHMMSS>.html` listing every test, its verdict, conclusion, resolution time, ticket and PR. Use when the user invokes /fix-test-failures with one or more Testray case result IDs.
 name: fix-test-failures
 ---
 
 # Fix Test Failures
 
-Resolve one or more test failures end-to-end. Take a JSON payload describing a single failure or an array of failures, switch into the local liferay-portal checkout pointed at by `${LIFERAY_PORTAL_PATH}`, and process each failure in turn: reproduce it, identify the offending change in the supplied SHA range, fix the responsible side (test or product), file a Jira ticket, commit, and open a PR. When all failures have been processed (or skipped), print a markdown summary and render a self-contained HTML report from the template under `references/`.
+Resolve one or more test failures end-to-end. Take one or more Testray case result IDs, fetch each failure's data through `/collect-failure-data`, switch into the local liferay-portal checkout pointed at by `${LIFERAY_PORTAL_PATH}`, and process each failure in turn: reproduce it, identify the offending change in the supplied SHA range, fix the responsible side (test or product), file a Jira ticket, commit, and open a PR. When all failures have been processed (or skipped), print a markdown summary and render a self-contained HTML report from the template under `references/`.
 
 ## Input
 
 `${ARGUMENTS}` is either:
 
-- A single JSON object describing one failure, or
-- A JSON array of one or more such objects.
+- A single positive integer (one Testray case result ID), or
+- A JSON array of one or more positive integers.
 
-Each failure object has the following fields:
+Normalise a single integer into a one-element array internally so the rest of the workflow only needs to iterate. Abort immediately when the input does not parse to a non-empty list of positive integers.
+
+For each case result ID, the failure data is fetched at the start of its iteration by invoking the `collect-failure-data` script (the same one `/collect-failure-data` runs). The script writes the failure object directly to `output/test-failure-<caseResultId>-<YYYY-MM-DD>.json` (no wrapper), with these fields:
 
 - **errorTrace** — error trace produced by the test framework.
-- **firstFailSha** — first commit where the test failed.
-- **lastPassSha** — commit where the test last passed.
+- **firstFailSha** — first commit where the test failed (may be `null` when the case has no recorded failure history).
+- **lastPassSha** — commit where the test last passed (may be `null` when the case has no recent pass on record).
 - **name** — test name (class, spec, or method).
-- **serverTrace** — optional. Trace from the Liferay server log, when applicable. May be empty or omitted entirely.
 - **type** — one of `Java Integration`, `Java Semantic Versioning`, `Java Unit`, `JavaScript`, `Playwright`, `Poshi`.
-
-Abort immediately when any required field is missing on any input failure. Normalise a single object into a one-element array internally so the rest of the workflow only needs to iterate.
 
 ## Hard Preconditions
 
@@ -56,10 +55,16 @@ The `jira-bug`, `jira-task`, `format-source`, `commit`, and `pr` skills referenc
 
 ## Workflow
 
-Resolve `${LIFERAY_PORTAL_PATH}` from `.env.local` and switch to it before processing any failure. Every command from here on operates against that checkout:
+Capture the analyzer project root before doing anything else — the per-iteration `collect-failure-data` step runs from there, and the final HTML report is written there too:
 
 ```bash
-export LIFERAY_PORTAL_PATH=$(grep '^LIFERAY_PORTAL_PATH=' .env.local | cut --delimiter='=' --fields=2)
+export LIFERAY_TEST_ANALYZER_PATH=$(pwd)
+```
+
+Resolve `${LIFERAY_PORTAL_PATH}` from `.env.local` and switch to it before processing any failure. Every command from here on (other than the per-iteration collect call, which runs in a subshell) operates against that checkout:
+
+```bash
+export LIFERAY_PORTAL_PATH=$(grep '^LIFERAY_PORTAL_PATH=' "${LIFERAY_TEST_ANALYZER_PATH}/.env.local" | cut --delimiter='=' --fields=2)
 cd "${LIFERAY_PORTAL_PATH}"
 ```
 
@@ -83,11 +88,26 @@ Initialise an empty in-memory results array. One entry will be appended for ever
 }
 ```
 
-Then iterate over the input. **At the start of every iteration**, snapshot the iteration start time so the per-failure resolution time can be computed when the entry is recorded:
+Then iterate over the input case result IDs. **At the start of every iteration**, snapshot the iteration start time so the per-failure resolution time can be computed when the entry is recorded:
 
 ```bash
 date +%s > /tmp/fix-test-failures.iter-start
 ```
+
+Then fetch the failure data for the current case result ID by invoking `collect-failure-data` from the analyzer root in a subshell — the parent shell stays in `${LIFERAY_PORTAL_PATH}`. The script writes the JSON snapshot under `${LIFERAY_TEST_ANALYZER_PATH}/output/` and prints its absolute path on stdout:
+
+```bash
+(cd "${LIFERAY_TEST_ANALYZER_PATH}" && npm run --silent collect-failure-data -- "${CASE_RESULT_ID}") \
+    > /tmp/fix-test-failures.collect-stdout \
+    2> /tmp/fix-test-failures.collect-stderr
+COLLECT_EXIT=$?
+```
+
+Branch on `${COLLECT_EXIT}`:
+
+- **`0`** — success. Read the absolute path from `/tmp/fix-test-failures.collect-stdout` (last `*.json` line) and parse that file as the failure object directly (no wrapper). Its fields (`name`, `type`, `errorTrace`, `lastPassSha`, `firstFailSha`) feed the rest of the iteration. `lastPassSha` and `firstFailSha` may be `null` individually — leave the downstream steps to handle those degraded ranges (they will surface as `Unresolved` if no investigation route is possible). Continue to step 1.
+- **`2`** — the supplied case result has status `PASSED`. Read the explanatory message from `/tmp/fix-test-failures.collect-stderr`. Mark the failure as `No fix needed` with `conclusion` set to that message verbatim. Append the entry (no name/type are available because no JSON was written — use `name: "case-result <CASE_RESULT_ID>"` and `type: "Unknown"` placeholders for the report row). Run the cleanup in step 10 and continue with the next case result ID.
+- **Any other non-zero exit** — fetch error. Read the message from `/tmp/fix-test-failures.collect-stderr` and mark the failure as `Unresolved` with `conclusion` set to that message (prefixed with `Failed to collect failure data: `). Use the same `name`/`type` placeholders as above. Append the entry, run the cleanup in step 10, and continue with the next case result ID.
 
 For each failure, run steps 1–10 below. After each iteration — whether it succeeded or aborted — make sure the working tree is back on a clean `master` before starting the next one:
 
@@ -221,11 +241,11 @@ Decide the type from the change that turned the test green:
 
 Capture the commit key as `LPD-XXXXX` for the next steps. Branch and commits both use this key. Save the full `https://liferay.atlassian.net/browse/LPD-XXXXX` URL on the in-flight result entry as `ticketUrl`.
 
-Tag the commit-key ticket with the `claude-automated` label so every ticket created by this skill stays searchable as a group:
+Tag the commit-key ticket with the `claude-test-fix` label so every ticket created by this skill stays searchable as a group:
 
 ```bash
 curl \
-	--data '{"update": {"labels": [{"add": "claude-automated"}]}}' \
+	--data '{"update": {"labels": [{"add": "claude-test-fix"}]}}' \
 	--header "Content-Type: application/json" \
 	--request PUT \
 	--silent \
@@ -377,17 +397,17 @@ OUT="output/fix-${TIMESTAMP}.html"
 
 Substitute these top-level placeholders in the template (string replace — they each appear exactly once):
 
-| Placeholder        | Value                                                                  |
-| ------------------ | ---------------------------------------------------------------------- |
-| `{{date}}`         | `<YYYY-MM-DD>`                                                         |
-| `{{time}}`         | `<HH:MM>`                                                              |
-| `{{total}}`        | total number of result entries                                         |
-| `{{resolved}}`     | count of entries with verdict `Bug in portal` or `Outdated test`       |
-| `{{noFixNeeded}}`  | count of entries with verdict `No fix needed`                          |
-| `{{unresolved}}`   | count of entries with verdict `Unresolved`                             |
-| `{{minutes}}`      | run-level elapsed minutes                                              |
-| `{{seconds}}`      | run-level elapsed seconds                                              |
-| `{{rows}}`         | the concatenation of the per-entry `<tr>` snippets                     |
+| Placeholder       | Value                                                            |
+| ----------------- | ---------------------------------------------------------------- |
+| `{{date}}`        | `<YYYY-MM-DD>`                                                   |
+| `{{time}}`        | `<HH:MM>`                                                        |
+| `{{total}}`       | total number of result entries                                   |
+| `{{resolved}}`    | count of entries with verdict `Bug in portal` or `Outdated test` |
+| `{{noFixNeeded}}` | count of entries with verdict `No fix needed`                    |
+| `{{unresolved}}`  | count of entries with verdict `Unresolved`                       |
+| `{{minutes}}`     | run-level elapsed minutes                                        |
+| `{{seconds}}`     | run-level elapsed seconds                                        |
+| `{{rows}}`        | the concatenation of the per-entry `<tr>` snippets               |
 
 Build `{{rows}}` by joining one snippet per result entry. Use the **resolved row** snippet for verdicts `Bug in portal` / `Outdated test`, the **no-fix-needed row** snippet for `No fix needed`, and the **unresolved row** snippet for `Unresolved`. The CSS class on the verdict pill is the kebab-cased verdict (`bug-in-portal`, `outdated-test`, `no-fix-needed`, `unresolved`).
 
