@@ -435,7 +435,7 @@ Unresolved row snippet (Jira ticket and PR cells render an em dash since neither
 </tr>
 ```
 
-Wrap any commit short SHAs and code identifiers inside `{{conclusion}}` in `<code>…</code>` so they pick up the table's monospace styling — the validated CSS already handles wrapping for them.
+Wrap any code identifiers inside `{{conclusion}}` in `<code>…</code>` so they pick up the table's monospace styling — the validated CSS already handles wrapping for them. For commit short SHAs, wrap them in a link to the corresponding commit on the Liferay portal repository: `<a href="https://github.com/liferay/liferay-portal/commit/<full-sha>"><code><short-sha></code></a>`. Use the **full** 40-character SHA in the URL (so the link survives any future short-SHA collisions) and the **short** 13-character SHA inside `<code>` for the visible text.
 
 After writing the file, end the message with a single line linking to it:
 
