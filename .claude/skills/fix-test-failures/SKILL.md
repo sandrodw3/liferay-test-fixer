@@ -180,47 +180,75 @@ When the run produces a stack trace, also read `<bundles>/logs/liferay.<date>.lo
 
 Compare the local outcome with **errorTrace**:
 
-- **Test passes** → mark the failure as `No fix needed` with the `conclusion` set to the literal string `Test passes locally`. **Do not** investigate further: skip step 3 (suspect diff), step 4 (iteration), and steps 5–9 (ticket, branch, format, commit, PR). Run the cleanup in step 10, append the result entry, and continue with the next failure.
+- **Test passes** → mark the failure as `No fix needed` with the `conclusion` set to the literal string `Test passes locally`. **Do not** investigate further: skip step 3 (diagnosis), step 4 (iteration), and steps 5–9 (ticket, branch, format, commit, PR). Run the cleanup in step 10, append the result entry, and continue with the next failure.
 - **Same failure** → continue to step 3.
 - **Different failure** → surface the diff and ask the user whether to proceed. When the user is unreachable or declines, mark the failure as `Unresolved` with a `conclusion` summarising both traces (the one in the input JSON and the one observed locally) and continue to the next one.
 
-### 3. Build the Suspect Diff
+### 3. Diagnose the Cause
+
+The breaking change lies in the suspect diff between `${LAST_PASS_SHA}` and `${FIRST_FAIL_SHA}`. Before iterating, identify which commit broke the test and form a working hypothesis on whether the change was **intentional** (test is outdated) or **accidental** (product regression). The hypothesis is provisional — iteration may sharpen it — but starting without one means the verdict ends up decided by which fix happens to reach green first.
+
+#### 3.1 Pinpoint the offending commit
 
 ```bash
 git log --oneline ${LAST_PASS_SHA}..${FIRST_FAIL_SHA}
 git diff --stat ${LAST_PASS_SHA}..${FIRST_FAIL_SHA}
 ```
 
-The breaking change must lie in this range. Build a candidate list ordered by relevance to the test:
+Two high-signal probes — use them before reading commits one by one:
 
-1. Files in the test's own module.
+- For the file that owns the line nearest the failing assertion or the topmost frame in **errorTrace**:
 
-1. Files in modules whose packages the test imports.
+    ```bash
+    git log -L <line>,<line>:<file> ${LAST_PASS_SHA}..${FIRST_FAIL_SHA}
+    ```
 
-1. Files in `*-api`, `portal-kernel`, or shared `frontend-js-*` modules. Their blast radius is wide.
+- When the failure is a missing UI text, message, or element (typical for `Playwright` and `Poshi`), grep the suspect diff for the exact string the test was looking for:
 
-1. Files in `portal-impl`, `petra-*`, or other shared infrastructure.
+    ```bash
+    git log -S "<exact-string-from-assertion>" ${LAST_PASS_SHA}..${FIRST_FAIL_SHA}
+    ```
 
-For the file that owns the line nearest the failing assertion or the topmost frame in **errorTrace**, run `git log -L` to pinpoint the commit that touched it inside the range:
+When neither probe points to a single commit, fall back to the candidate ordering: files in the test's own module first, then modules whose packages the test imports, then `*-api` / `portal-kernel` / shared `frontend-js-*`, then `portal-impl` / `petra-*` / shared infrastructure.
+
+#### 3.2 Form the hypothesis
+
+Read the offending commit's documented intent — the commit message, the linked Jira ticket when the subject carries an `LPD-XXXXX` key, and the GitHub PR body when the commit landed via a PR:
 
 ```bash
-git log -L <line>,<line>:<file> ${LAST_PASS_SHA}..${FIRST_FAIL_SHA}
+git show <offending-sha>
+
+curl \
+	--header "Content-Type: application/json" \
+	--silent \
+	--url "https://liferay.atlassian.net/rest/api/3/issue/LPD-XXXXX?fields=summary,issuetype,description" \
+	--user "${JIRA_API_USER}:${JIRA_API_TOKEN}"
+
+gh pr list --search "<offending-sha>" --repo brianchandotcom/liferay-portal --state merged --json number,title,body
 ```
 
-This is the highest-signal probe — use it before reading individual commits.
+The single question to answer: **does the commit's documented scope (subject + ticket + PR) explicitly cover the behavior the test was asserting on?**
+
+- **Yes** → hypothesis is `Outdated test`. The change was intentional and the assertion checks a contract that no longer exists.
+- **No** → hypothesis is `Bug in portal`. The broken behavior is a side effect, not the goal of the change. This is also the default when the answer is unclear: tests encode expectations, and silencing an assertion without documented justification is worse than restoring product behavior that was probably dropped by accident.
+- **No offending commit was reliably identified, or no documentation exists at all** → mark the failure as `Unresolved` with a `conclusion` listing the candidate commits and what was tried. Do not iterate.
+
+Record the hypothesis in the conversation as a single short paragraph: offending commit short SHA and subject, linked ticket key / type / summary (or "no linked ticket"), one sentence answering the question above with cited evidence, and the hypothesis verdict. The same paragraph is reused in the PR body's "Root Cause" section in step 9.
 
 ### 4. Iterate Until Green
 
-Work on `master` with uncommitted changes — the branch is created later, once the cause is confirmed. Apply a fix, then run the test command from step 2.2. For types that require deploy, redeploy the affected modules between attempts.
+Work on `master` with uncommitted changes — the branch is created later, once the fix is confirmed. Apply a fix consistent with the hypothesis from step 3.2, then run the test command from step 2.2. For types that require deploy, redeploy the affected modules between attempts.
 
-While iterating, keep both hypotheses open:
+The fix must touch something inside the suspect diff: revert or correct the offending hunks (`Bug in portal`), or adapt the test to the new contract documented in those hunks (`Outdated test`). A fix that ignores the diff is fantasising — go back to step 3.
 
-- **Product code** is the cause when the test was correct and a change in range introduced a regression. The eventual ticket is a **Bug** and the verdict in the final report is `Bug in portal`.
-- **Test code** is the cause when a deliberate contract change in the product made the assertions stale. The eventual ticket is a **Task** and the verdict in the final report is `Outdated test`.
+Iteration is part of diagnosis, not a rote application of the hypothesis. The hypothesis can legitimately flip while iterating, but only when iteration surfaces **new evidence** that changes the answer to step 3.2's question:
 
-When ambiguous, prefer fixing product code — tests encode expectations.
+- Trying to adapt the test reveals the asserted element/UX is genuinely useful with no replacement in the offending commit → flip to `Bug in portal`.
+- Trying to restore product behavior reveals the offending commit deliberately removed it as part of a documented contract change you missed on first read → flip to `Outdated test`.
 
-Stop after **5 iterations** without convergence. The goal is always to resolve the failure — give up only when continuing would mean fantasising fixes rather than diagnosing. Mark the failure as `Unresolved` and write a `conclusion` that gives the user a real handover: list the hypotheses considered, the concrete attempts made (one short bullet per iteration is enough), what each attempt changed about the failure, and the most plausible remaining lead. Run the cleanup in step 10 and continue to the next failure. Do not file a ticket or commit on incomplete work.
+What is **not** legitimate is flipping sides because the fix you tried first didn't reach green. Re-examine the diagnosis with new evidence; pure trial-and-error is not new evidence.
+
+Stop after **5 iterations** without convergence. Mark the failure as `Unresolved` and write a `conclusion` that gives the user a real handover: hypotheses considered, attempts made (one short bullet per iteration), what each attempt changed about the failure, and the most plausible remaining lead. Run the cleanup in step 10 and continue to the next failure. Do not file a ticket or commit on incomplete work.
 
 ### 5. File the Jira Ticket
 
@@ -455,7 +483,8 @@ Report saved to [file:///<absolute-path>/output/fix-<YYYY-MM-DD>-<HHMMSS>.html](
 
 ## Hard Rules
 
-- Never silence a test by deleting assertions, weakening expectations, or annotating `@Ignore` to make it pass.
+- The fix must touch something inside the suspect diff between `${LAST_PASS_SHA}` and `${FIRST_FAIL_SHA}` — that is the only place the regression can live. A fix outside that range means the diagnosis is wrong.
+- Removing, weakening, or `@Ignore`-ing an assertion is only legitimate when the offending commit's documentation (subject, linked Jira ticket, or PR body) explicitly states the contract change the assertion was checking. Without that documented justification, the assertion is correct and the regression lives in product code.
 - Never file a ticket or commit without a green local run.
 - Never skip the format step.
 - Never deploy-skip a type that requires deploy: `Java Integration`, `Playwright`, and `Poshi` need the modules in the bundle before the rerun.
