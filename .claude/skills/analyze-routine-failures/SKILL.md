@@ -1,6 +1,6 @@
 ---
 name: analyze-routine-failures
-description: Analyze the most recent failures of a Testray routine. Given a routine ID, runs the project's `collect` script to produce a fresh JSON snapshot of failures, then for each failure investigates likely root causes by inspecting the test code, the recorded `errorTrace`, the commit window between `lastPassSha` and `firstFailSha`, and lazily-resolved Liferay portal module dependencies. Suspect commits are grouped into `LPD-XXXXX` clusters when they share a ticket prefix. Static analysis only — no test execution. Produces a markdown table in English with verdict, suspect cluster(s), confidence, and fix proposals.
+description: Analyze the failures of a Testray routine from an existing JSON snapshot produced by `/collect-routine-failures`. Given a routine ID, locates the most recent `output/test-failures-<routineId>-<YYYY-MM-DD>.json`, then for each failure investigates likely root causes by inspecting the test code, the recorded `errorTrace`, the commit window between `lastPassSha` and `firstFailSha`, and lazily-resolved Liferay portal module dependencies. Suspect commits are grouped into `LPD-XXXXX` clusters when they share a ticket prefix. Static analysis only — no test execution, no data collection. Produces a markdown table in English with verdict, suspect cluster(s), confidence, and fix proposals.
 ---
 
 # Analyze routine failures
@@ -19,9 +19,11 @@ Investigate the failures of a single Testray routine and produce an analysis rep
 
 Verify all of these before doing any analysis. Fail fast with a clear message if any is missing.
 
-- The current working directory is the `liferay-test-analyzer` project root (a `package.json` with the `collect` script must exist).
-- `.env.local` exists and exports `TESTRAY_CLIENT_ID`, `TESTRAY_CLIENT_SECRET`, and `LIFERAY_PORTAL_PATH`.
+- The current working directory is the `liferay-test-analyzer` project root.
+- `.env.local` exists and exports `LIFERAY_PORTAL_PATH`.
 - `LIFERAY_PORTAL_PATH` points to a directory that is a git checkout of `liferay-portal` and is currently on `master`.
+
+This skill does **not** call the Testray API and does **not** need `TESTRAY_CLIENT_ID` / `TESTRAY_CLIENT_SECRET`. Data collection is `/collect-routine-failures`'s job.
 
 ## Output language
 
@@ -29,13 +31,21 @@ The final report and every label/column/section header in it MUST be written in 
 
 ## Workflow
 
-### 1. Run the collect script
+### 1. Locate the JSON snapshot
+
+This skill does not collect data — it consumes a snapshot already produced by `/collect-routine-failures`. List the candidate files:
 
 ```
-npm run collect -- <routineId>
+ls -t output/test-failures-<routineId>-*.json 2>/dev/null
 ```
 
-The script writes `output/test-failures-<YYYY-MM-DD>.json`. Always read the file path printed on stdout — do not guess the filename. Read that JSON; the rest of the workflow operates on its contents.
+Branch on the result:
+
+- **0 matches** — abort with a clear message: no snapshot exists for that routine. Tell the user to run `/collect-routine-failures <routineId>` first. Do **not** call `npm run collect` yourself.
+- **1 match** — use it.
+- **2+ matches** — pick the most recent (first line of `ls -t`, i.e. by mtime) and **inform the user which file was selected** before continuing.
+
+Read the chosen JSON; the rest of the workflow operates on its contents.
 
 ### 2. Defensive git fetch
 
@@ -152,9 +162,9 @@ For each non-skipped failure, decide:
 Produce the report in two formats, one per destination:
 
 1. **Conversation (markdown)**: print the full markdown report directly in the chat so the user sees it without opening a file. Same content as the structure below.
-2. **Disk (HTML)**: render the same content as a self-contained HTML file at `output/analysis-<YYYY-MM-DD>.html` (same `output/` directory `collect` writes the JSON to). Use today's date in the filename; if the file already exists for today, overwrite it — one analysis per day, mirroring the JSON snapshot's convention. Do **not** also write a `.md` copy.
+2. **Disk (HTML)**: render the same content as a self-contained HTML file at `output/analysis-<routineId>-<YYYY-MM-DD>.html` (same `output/` directory the JSON snapshot lives in). Use today's date in the filename; if the file already exists for that routine and today, overwrite it — one analysis per routine per day, mirroring the JSON snapshot's convention. Do **not** also write a `.md` copy.
 
-After printing the markdown report in the conversation, end your final message with a single line linking to the generated HTML — `Report saved to [file:///<absolute-path>/output/analysis-<YYYY-MM-DD>.html](file:///<absolute-path>/output/analysis-<YYYY-MM-DD>.html)` — using the absolute `file://` URL so it opens directly in a browser.
+After printing the markdown report in the conversation, end your final message with a single line linking to the generated HTML — `Report saved to [file:///<absolute-path>/output/analysis-<routineId>-<YYYY-MM-DD>.html](file:///<absolute-path>/output/analysis-<routineId>-<YYYY-MM-DD>.html)` — using the absolute `file://` URL so it opens directly in a browser.
 
 #### 6a. Markdown structure (conversation)
 
@@ -414,4 +424,4 @@ Do not modify the CSS unless a new failure mode appears — and if you do, updat
 - **Fail clearly on missing preconditions** — do not silently substitute defaults for missing env vars or unreachable hashes.
 - **Cache `git show` results by hash** during a single run; do not re-shell for the same commit when it appears in multiple failures' windows.
 - **Confidence must be honest**: when the window is huge or the test couldn't be located, say so with `low` and explain in the notes; do not overstate.
-- **No file mutations outside the project** — the skill writes only inside `output/` (the HTML report alongside the JSON already written by `collect`) and never touches anything outside the project root.
+- **No file mutations outside the project** — the skill writes only inside `output/` (the HTML report alongside the JSON snapshot produced by `/collect-routine-failures`) and never touches anything outside the project root.
