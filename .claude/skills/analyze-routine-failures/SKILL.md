@@ -1,6 +1,6 @@
 ---
 name: analyze-routine-failures
-description: Analyze the most recent failures of a Testray routine. Given a routine ID, runs the project's `collect` script to produce a fresh JSON snapshot of failures, then for each failure investigates likely root causes by inspecting the test code, the recorded `errors`, the commit window between `lastPassedHash` and `firstFailedHash`, and lazily-resolved Liferay portal module dependencies. Suspect commits are grouped into `LPD-XXXXX` clusters when they share a ticket prefix. Static analysis only — no test execution. Produces a markdown table in English with verdict, suspect cluster(s), confidence, and fix proposals.
+description: Analyze the most recent failures of a Testray routine. Given a routine ID, runs the project's `collect` script to produce a fresh JSON snapshot of failures, then for each failure investigates likely root causes by inspecting the test code, the recorded `errorTrace`, the commit window between `lastPassSha` and `firstFailSha`, and lazily-resolved Liferay portal module dependencies. Suspect commits are grouped into `LPD-XXXXX` clusters when they share a ticket prefix. Static analysis only — no test execution. Produces a markdown table in English with verdict, suspect cluster(s), confidence, and fix proposals.
 ---
 
 # Analyze routine failures
@@ -39,7 +39,7 @@ The script writes `output/test-failures-<YYYY-MM-DD>.json`. Always read the file
 
 ### 2. Defensive git fetch
 
-In the portal repo, fetch quietly so any `lastPassedHash`/`firstFailedHash` is reachable:
+In the portal repo, fetch quietly so any `lastPassSha`/`firstFailSha` is reachable:
 
 ```
 git -C "$LIFERAY_PORTAL_PATH" fetch --quiet origin master
@@ -100,7 +100,7 @@ Read the test file. Also read the SUT (the production module the test exercises)
 #### 5b. Resolve the commit window
 
 ```
-git -C "$LIFERAY_PORTAL_PATH" log --pretty=format:'%H %s' <lastPassedHash>..<firstFailedHash>
+git -C "$LIFERAY_PORTAL_PATH" log --pretty=format:'%H %s' <lastPassSha>..<firstFailSha>
 ```
 
 If either hash is `null` in the JSON (no recorded last-passed or first-failed), state that in the row and proceed with whatever side of the window is available — confidence is automatically `low` in that case.
@@ -124,7 +124,7 @@ Commits without a recognisable ticket prefix stay as standalone candidates.
 
 #### 5d. LLM judgment on plausible commits and clusters
 
-For each plausible cluster (and each standalone commit), read the diffs (`git -C "$LIFERAY_PORTAL_PATH" show <hash>`) plus the commit messages, and reason about whether the cluster could plausibly produce the failure described in `errors`. Take into account:
+For each plausible cluster (and each standalone commit), read the diffs (`git -C "$LIFERAY_PORTAL_PATH" show <hash>`) plus the commit messages, and reason about whether the cluster could plausibly produce the failure described in `errorTrace`. Take into account:
 
 - The exact exception type and key tokens of the error message.
 - The line numbers / class / method named in the stacktrace, when present.

@@ -15,20 +15,18 @@ export function buildExport(results: TestResult[], build: RoutineBuild) {
 				return {
 					name: result.name,
 					type: getTypeLabel(result.type),
-					errors: result.errors,
+					errorTrace: result.errorTrace,
 				}
 			}
 
-			const { lastPassedHash, firstFailedHash } = findHashes(
-				result.history
-			)
+			const { lastPassSha, firstFailSha } = findHashes(result.history)
 
 			return {
 				name: result.name,
 				type: getTypeLabel(result.type),
-				errors: result.errors,
-				lastPassedHash,
-				firstFailedHash,
+				errorTrace: result.errorTrace,
+				lastPassSha,
+				firstFailSha,
 			}
 		}),
 	}
@@ -36,22 +34,22 @@ export function buildExport(results: TestResult[], build: RoutineBuild) {
 
 function findHashes(history: TestResult['history']) {
 	if (!history) {
-		return { lastPassedHash: null, firstFailedHash: null }
+		return { lastPassSha: null, firstFailSha: null }
 	}
 
-	let lastPassedHash: string | null = null
-	let firstFailedHash: string | null = null
+	let lastPassSha: string | null = null
+	let firstFailSha: string | null = null
 
 	for (const entry of history) {
 		if (entry.status === 'PASSED') {
-			lastPassedHash = entry.gitHash
+			lastPassSha = entry.gitHash
 			break
 		}
 
 		if (entry.status === 'FAILED') {
-			firstFailedHash = entry.gitHash
+			firstFailSha = entry.gitHash
 		}
 	}
 
-	return { lastPassedHash, firstFailedHash }
+	return { lastPassSha, firstFailSha }
 }

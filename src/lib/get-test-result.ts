@@ -18,7 +18,7 @@ export function getTestResult({
 
 	return {
 		name: testCase.name,
-		errors: caseResult.errors,
+		errorTrace: caseResult.errors,
 		history: history && parseHistory(history),
 		type,
 	}
