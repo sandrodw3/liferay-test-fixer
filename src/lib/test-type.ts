@@ -1,6 +1,6 @@
-import { TestResult } from '@/types/test-result'
+import { CaseType } from '@/types/testray'
 
-type TypeName = TestResult['type']
+type TypeName = CaseType['name'] | 'Java Log Assertor'
 
 export function getTypeLabel(typeName: TypeName) {
 	if (typeName === 'Playwright Test') {
@@ -18,19 +18,4 @@ export function getTypeLabel(typeName: TypeName) {
 	}
 
 	return typeName
-}
-
-export function getTypeWeight(typeName: TypeName): number {
-	const WEIGHTS = {
-		'Playwright Test': 0,
-		'JS Unit Test': 1,
-		'Modules Integration Test': 2,
-		'Java Log Assertor': 4,
-		'Modules Unit Test': 3,
-		'Modules Semantic Versioning Test': 5,
-		'Automated Functional Test': 6,
-		'Batch': 7,
-	}
-
-	return WEIGHTS[typeName] ?? 99
 }
