@@ -40,6 +40,4 @@ Pass one or more Testray case result IDs separated by spaces. For each case resu
 
 ![Sample HTML report](docs/report-screenshot.png)
 
-## Other available skills
-
-- `/collect-failure-data <caseResultId>` — fetch the failure JSON for a single Testray case result without running the fix workflow. Writes `output/test-failure-<caseResultId>-<YYYY-MM-DD>.json` with `name`, `type`, `errorTrace`, `lastPassSha`, and `firstFailSha`. The `lastPassSha` and `firstFailSha` are computed over the case's history filtered to the same routine as the supplied case result. Aborts with a clear message when the supplied case result has status `PASSED`. This is the same script `/fix-test-failures` calls under the hood.
+_Sample rendering with fake data — test names, commits, tickets and PRs are illustrative only._
