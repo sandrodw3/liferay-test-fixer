@@ -19,7 +19,7 @@ Produce a fresh JSON snapshot of a single Testray case result's failure by runni
 
 Verify before running. Fail fast with a clear message if any is missing.
 
-- The current working directory is the `liferay-test-analyzer` project root (a `package.json` with the `collect-failure-data` script must exist).
+- The current working directory is the `liferay-test-fixer` project root (a `package.json` with the `collect-failure-data` script must exist).
 - `.env.local` exists and exports `TESTRAY_CLIENT_ID` and `TESTRAY_CLIENT_SECRET`.
 
 ## Workflow

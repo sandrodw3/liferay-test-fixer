@@ -30,7 +30,7 @@ For each case result ID, the failure data is fetched at the start of its iterati
 
 Verify all of these once at the start of the run, before processing any failure. Fail fast with a clear message if any is missing.
 
-- The current working directory is the `liferay-test-analyzer` project root.
+- The current working directory is the `liferay-test-fixer` project root.
 - `.env.local` exists at the project root and exports `LIFERAY_PORTAL_PATH`.
 - `${LIFERAY_PORTAL_PATH}` points to a directory that is a git checkout of `liferay-portal`.
 - That checkout has a clean working tree (`git -C "${LIFERAY_PORTAL_PATH}" status --porcelain` is empty).
@@ -51,20 +51,20 @@ Verify all of these once at the start of the run, before processing any failure.
 
 ## Cross-Repo Skills
 
-The `jira-bug`, `jira-task`, `format-source`, `commit`, and `pr` skills referenced in this workflow live in `${LIFERAY_PORTAL_PATH}/.claude/skills/`, not in this project. They are not available via the `Skill` tool when this workflow runs from `liferay-test-analyzer`. When a step says "invoke the `<name>` skill", read its `SKILL.md` from that directory and apply its workflow inline, executing the equivalent commands against `${LIFERAY_PORTAL_PATH}`.
+The `jira-bug`, `jira-task`, `format-source`, `commit`, and `pr` skills referenced in this workflow live in `${LIFERAY_PORTAL_PATH}/.claude/skills/`, not in this project. They are not available via the `Skill` tool when this workflow runs from `liferay-test-fixer`. When a step says "invoke the `<name>` skill", read its `SKILL.md` from that directory and apply its workflow inline, executing the equivalent commands against `${LIFERAY_PORTAL_PATH}`.
 
 ## Workflow
 
-Capture the analyzer project root before doing anything else — the per-iteration `collect-failure-data` step runs from there, and the final HTML report is written there too:
+Capture the fixer project root before doing anything else — the per-iteration `collect-failure-data` step runs from there, and the final HTML report is written there too:
 
 ```bash
-export LIFERAY_TEST_ANALYZER_PATH=$(pwd)
+export LIFERAY_TEST_FIXER_PATH=$(pwd)
 ```
 
 Resolve `${LIFERAY_PORTAL_PATH}` from `.env.local` and switch to it before processing any failure. Every command from here on (other than the per-iteration collect call, which runs in a subshell) operates against that checkout:
 
 ```bash
-export LIFERAY_PORTAL_PATH=$(grep '^LIFERAY_PORTAL_PATH=' "${LIFERAY_TEST_ANALYZER_PATH}/.env.local" | cut --delimiter='=' --fields=2)
+export LIFERAY_PORTAL_PATH=$(grep '^LIFERAY_PORTAL_PATH=' "${LIFERAY_TEST_FIXER_PATH}/.env.local" | cut --delimiter='=' --fields=2)
 cd "${LIFERAY_PORTAL_PATH}"
 ```
 
@@ -94,10 +94,10 @@ Then iterate over the input case result IDs. **At the start of every iteration**
 date +%s > /tmp/fix-test-failures.iter-start
 ```
 
-Then fetch the failure data for the current case result ID by invoking `collect-failure-data` from the analyzer root in a subshell — the parent shell stays in `${LIFERAY_PORTAL_PATH}`. The script writes the JSON snapshot under `${LIFERAY_TEST_ANALYZER_PATH}/output/` and prints its absolute path on stdout:
+Then fetch the failure data for the current case result ID by invoking `collect-failure-data` from the fixer root in a subshell — the parent shell stays in `${LIFERAY_PORTAL_PATH}`. The script writes the JSON snapshot under `${LIFERAY_TEST_FIXER_PATH}/output/` and prints its absolute path on stdout:
 
 ```bash
-(cd "${LIFERAY_TEST_ANALYZER_PATH}" && npm run --silent collect-failure-data -- "${CASE_RESULT_ID}") \
+(cd "${LIFERAY_TEST_FIXER_PATH}" && npm run --silent collect-failure-data -- "${CASE_RESULT_ID}") \
     > /tmp/fix-test-failures.collect-stdout \
     2> /tmp/fix-test-failures.collect-stderr
 COLLECT_EXIT=$?
@@ -386,10 +386,10 @@ Per verdict:
 
 The HTML template lives at `references/report.html` inside this skill. It is a single self-contained file with all required CSS already validated for column overflow, long `<code>` wrapping, sticky header, and per-verdict colour cues — do not duplicate or rewrite the markup; read the template, substitute the placeholders, and write the result to `output/`.
 
-Make sure to switch back to the `liferay-test-analyzer` project root before writing — every previous step has been operating inside `${LIFERAY_PORTAL_PATH}`. Use today's date and the current time in the filename so concurrent or sequential runs in the same day do not overwrite each other:
+Make sure to switch back to the `liferay-test-fixer` project root before writing — every previous step has been operating inside `${LIFERAY_PORTAL_PATH}`. Use today's date and the current time in the filename so concurrent or sequential runs in the same day do not overwrite each other:
 
 ```bash
-cd -                                            # back to the liferay-test-analyzer root
+cd -                                            # back to the liferay-test-fixer root
 TEMPLATE=.claude/skills/fix-test-failures/references/report.html
 TIMESTAMP=$(date '+%Y-%m-%d-%H%M%S')
 OUT="output/fix-${TIMESTAMP}.html"

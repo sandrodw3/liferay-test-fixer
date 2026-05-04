@@ -1,4 +1,4 @@
-# Liferay Test Analyzer
+# Liferay Test Fixer
 
 Tooling that pulls Testray routine failures and lets Claude Code fix them end-to-end against a local `liferay-portal` checkout — reproducing each failure, identifying the offending commit, applying the fix, filing a Jira ticket, and opening a PR per resolved failure.
 
@@ -7,8 +7,8 @@ Tooling that pulls Testray routine failures and lets Claude Code fix them end-to
 ### 1. Clone the repo
 
 ```
-git clone <repo-url> liferay-test-analyzer
-cd liferay-test-analyzer
+git clone <repo-url> liferay-test-fixer
+cd liferay-test-fixer
 npm install
 ```
 
