@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"private": true,
 	"scripts": {
-		"collect": "tsx --env-file=.env.local src/index.ts",
+		"collect-failure-data": "tsx --env-file=.env.local src/failure-data.ts",
 		"format": "prettier --write ."
 	},
 	"devDependencies": {
