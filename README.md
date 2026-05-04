@@ -1,6 +1,6 @@
 # Liferay Test Analyzer
 
-Static analysis tooling that pulls Testray routine failures and lets Claude Code investigate them against a local `liferay-portal` repository.
+Tooling that pulls Testray routine failures and lets Claude Code fix them end-to-end against a local `liferay-portal` checkout — reproducing each failure, identifying the offending commit, applying the fix, filing a Jira ticket, and opening a PR per resolved failure.
 
 ## 🔧 Setup
 
@@ -35,19 +35,17 @@ From inside this repo, invoke the collect skill in Claude Code:
 
 This runs the project's `collect` script against Testray and writes a JSON snapshot at `output/test-failures-<routineId>-<YYYY-MM-DD>.json` with per-failure metadata: `name`, `type`, `errorTrace`, `lastPassSha`, and `firstFailSha`.
 
-### 4. Analyze the snapshot
+### 4. Fix the failures
 
 ```
-/analyze-routine-failures <routineId>
+/fix-test-failures <failure JSON or array of failure JSONs>
 ```
 
-Claude picks the most recent snapshot for that routine in `output/`, walks the commit window between `lastPassSha` and `firstFailSha` for each failure, and classifies each one as `bug-in-portal`, `outdated-test`, or `unclear` with a confidence level and a fix proposal.
-
-This skill does not call Testray — it consumes the JSON produced by `/collect-routine-failures`. Re-run the collect skill whenever you want a fresh snapshot.
+Pick one or more failure entries from the snapshot above and pass them as the argument — a single object for one fix, or a JSON array to batch several. For each failure Claude switches into the local `liferay-portal` checkout, reproduces the failure, identifies the offending commit in the `lastPassSha`..`firstFailSha` window, iterates a fix on the test or the product code, files a Jira ticket, commits, and opens a PR. When one failure cannot be resolved (does not reproduce locally, iteration budget exhausted, …) it is recorded as `Unresolved` with a handover summary in its conclusion, and the run continues with the next failure.
 
 ### 5. Read the output
 
-- **Conversational report**: Claude prints the full analysis as a markdown table directly in the chat — verdict, suspect commit clusters, confidence, and fix proposal per failure.
-- **HTML report**: the same analysis is rendered as a self-contained HTML page at `output/analysis-<routineId>-<YYYY-MM-DD>.html`, with the table and per-failure summary formatted for reading in a browser. Claude prints a clickable link to it at the end of the conversational output.
+- **Conversational summary**: Claude prints a per-failure summary in the chat with the verdict, ticket link, PR link, resolution time, conclusion and fix description.
+- **HTML report**: the same information is rendered as a self-contained HTML table at `output/fix-<YYYY-MM-DD>-<HHMMSS>.html`, with one row per failure and columns for Test name, Type, Verdict (`Bug in portal` / `Outdated test` / `Unresolved`), Conclusion, Resolution time, Jira ticket, and PR. Claude prints a clickable link to the file at the end of the conversational output.
 
 ![Sample HTML report](docs/report-screenshot.png)
