@@ -148,7 +148,7 @@ Inspect the test source to discover which feature flags it depends on. Mirror th
     cp <bundles>/portal-ext.properties /tmp/portal-ext.properties.bak
     ```
 
-    Then add the required flags. The portal must be restarted for new flag values to take effect:
+    Then strip every existing `feature.flag.*` entry from `<bundles>/portal-ext.properties` and add only the flags the test requires — the file must end up with the test's flags and nothing else, so unrelated flags left over from previous runs cannot interfere. The original snapshot is restored later in step 10. The portal must be restarted for the new flag values to take effect:
 
     ```bash
     <bundles>/tomcat-*/bin/shutdown.sh
