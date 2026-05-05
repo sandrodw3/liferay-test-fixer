@@ -39,5 +39,3 @@ Pass one or more Testray case result IDs separated by spaces. For each case resu
 - **HTML report**: the same information is rendered as a self-contained HTML table at `output/<YYYY-MM-DD>-fix-report.html`, with one row per failure and columns for Test name, Type, Verdict (`Bug in portal` / `Outdated test` / `No fix needed` / `Unresolved`), Conclusion, Resolution time, Jira ticket, and PR. The file is keyed by date: every run on the same day appends its rows to the existing report and updates the cumulative totals and elapsed time, instead of writing a new file. Claude prints a clickable link to the file at the end of the conversational output.
 
 ![Sample HTML report](docs/report-screenshot.png)
-
-_Sample rendering with fake data — test names, commits, tickets and PRs are illustrative only._
