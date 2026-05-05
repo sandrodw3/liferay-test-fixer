@@ -313,7 +313,7 @@ Save the PR URL returned by the `pr` skill on the in-flight result entry as `prU
 
 ### 10. Restore the Portal
 
-When step 2.1 changed `<bundles>/portal-ext.properties`, restore the snapshot and restart the portal to leave it in its original state:
+When step 2.1 changed `<bundles>/portal-ext.properties`, restore the snapshot and shut Tomcat down so the next start picks up the original properties:
 
 ```bash
 cp /tmp/portal-ext.properties.bak <bundles>/portal-ext.properties
@@ -321,9 +321,20 @@ rm /tmp/portal-ext.properties.bak
 
 <bundles>/tomcat-*/bin/shutdown.sh
 while curl --fail --output /dev/null --silent --url http://localhost:8080; do sleep 2; done
-<bundles>/tomcat-*/bin/startup.sh
-until curl --fail --output /dev/null --silent --url http://localhost:8080; do sleep 5; done
 ```
+
+Then decide whether to start Tomcat back up:
+
+- **More iterations remain** — start Tomcat back up so the next iteration's step 2 finds a running portal:
+
+    ```bash
+    <bundles>/tomcat-*/bin/startup.sh
+    until curl --fail --output /dev/null --silent --url http://localhost:8080; do sleep 5; done
+    ```
+
+- **This was the last iteration of the run** — leave Tomcat stopped. The user starts the portal in dedicated terminals, so a startup launched here would collide with their workflow. The original properties have already been restored, so the next manual start picks up a clean state.
+
+The "last iteration" branch applies whether the iteration succeeded, short-circuited as `No fix needed`, or aborted as `Unresolved`. Step 2.1 was skipped on iterations that did not need flag changes, so this whole step is a no-op for them — Tomcat keeps running untouched, regardless of whether the iteration was the last one. Only iterations that actually restarted Tomcat need to make the start-vs-stop decision here.
 
 This step also runs when the iteration aborts in step 1, step 2, or step 4 (and when step 2 short-circuits with `No fix needed`), so the next iteration (or the user, after the last one) does not inherit a tampered properties file.
 
