@@ -240,7 +240,7 @@ Decide the type from the change that turned the test green:
 
 Capture the commit key as `LPD-XXXXX` for the next steps. Branch and commits both use this key. Save the full `https://liferay.atlassian.net/browse/LPD-XXXXX` URL on the in-flight result entry as `ticketUrl`.
 
-Tag the commit-key ticket with the `claude-test-fix` label so every ticket created by this skill stays searchable as a group:
+Tag the **top-level ticket** with the `claude-test-fix` label so every ticket created by this skill stays searchable as a group. The top-level ticket is the Bug itself for `Bug in portal`, and the parent Task (never the subtask) for `Outdated test`:
 
 ```bash
 curl \
@@ -248,9 +248,11 @@ curl \
 	--header "Content-Type: application/json" \
 	--request PUT \
 	--silent \
-	--url "https://liferay.atlassian.net/rest/api/3/issue/LPD-XXXXX" \
+	--url "https://liferay.atlassian.net/rest/api/3/issue/LPD-YYYYY" \
 	--user "${JIRA_API_USER}:${JIRA_API_TOKEN}"
 ```
+
+Where `LPD-YYYYY` is the Bug key for `Bug in portal` (so it equals the commit key) and the parent Task key for `Outdated test` (so it differs from the commit key, which is the subtask).
 
 ### 6. Create the Branch
 
