@@ -398,21 +398,20 @@ Per verdict:
 
 The HTML template lives at `references/report.html` inside this skill. It is a single self-contained file with all required CSS already validated for column overflow, long `<code>` wrapping, sticky header, and per-verdict colour cues — do not duplicate or rewrite the markup; read the template, substitute the placeholders, and write the result to `output/`.
 
-Make sure to switch back to the `liferay-test-fixer` project root before writing — every previous step has been operating inside `${LIFERAY_PORTAL_PATH}`. Use today's date and the current time in the filename so concurrent or sequential runs in the same day do not overwrite each other:
+Make sure to switch back to the `liferay-test-fixer` project root before writing — every previous step has been operating inside `${LIFERAY_PORTAL_PATH}`. The report is keyed by date: every run on the same day writes to the same file `output/<YYYY-MM-DD>-fix-report.html`, with later runs appending to it instead of creating a new file.
 
 ```bash
 cd -                                            # back to the liferay-test-fixer root
 TEMPLATE=.claude/skills/fix-test-failures/references/report.html
-TIMESTAMP=$(date '+%Y-%m-%d-%H%M%S')
-OUT="output/fix-${TIMESTAMP}.html"
+DATE=$(date '+%Y-%m-%d')
+OUT="output/${DATE}-fix-report.html"
 ```
 
-Substitute these top-level placeholders in the template (string replace — they each appear exactly once):
+When `${OUT}` does **not** exist yet, copy the template to `${OUT}` and substitute these top-level placeholders (string replace — they each appear exactly once):
 
 | Placeholder       | Value                                                            |
 | ----------------- | ---------------------------------------------------------------- |
 | `{{date}}`        | `<YYYY-MM-DD>`                                                   |
-| `{{time}}`        | `<HH:MM>`                                                        |
 | `{{total}}`       | total number of result entries                                   |
 | `{{resolved}}`    | count of entries with verdict `Bug in portal` or `Outdated test` |
 | `{{noFixNeeded}}` | count of entries with verdict `No fix needed`                    |
@@ -421,7 +420,15 @@ Substitute these top-level placeholders in the template (string replace — they
 | `{{seconds}}`     | run-level elapsed seconds                                        |
 | `{{rows}}`        | the concatenation of the per-entry `<tr>` snippets               |
 
-Build `{{rows}}` by joining one snippet per result entry. Use the **resolved row** snippet for verdicts `Bug in portal` / `Outdated test`, the **no-fix-needed row** snippet for `No fix needed`, and the **unresolved row** snippet for `Unresolved`. The CSS class on the verdict pill is the kebab-cased verdict (`bug-in-portal`, `outdated-test`, `no-fix-needed`, `unresolved`).
+When `${OUT}` **already** exists (an earlier run on the same day wrote it), do not overwrite it. Read it, then update it in place:
+
+1. Parse the existing summary line (`Failures processed: <total> (<resolved> resolved, <noFixNeeded> no fix needed, <unresolved> unresolved) · Elapsed: <Xm Ys>`) to recover the prior counts and elapsed seconds.
+2. Add the current run's counts and seconds to the prior values, and rewrite the summary line with the cumulative numbers.
+3. Append this run's row snippets immediately before the closing `</tbody>` tag, preserving the existing rows above.
+
+The h1/title (`Fix run (<YYYY-MM-DD>)`) and all other markup stay untouched on append.
+
+Build the row snippets for the current run by joining one snippet per result entry. Use the **resolved row** snippet for verdicts `Bug in portal` / `Outdated test`, the **no-fix-needed row** snippet for `No fix needed`, and the **unresolved row** snippet for `Unresolved`. The CSS class on the verdict pill is the kebab-cased verdict (`bug-in-portal`, `outdated-test`, `no-fix-needed`, `unresolved`).
 
 All three row snippets wrap the test name in `<span class="test-name">{{name}}</span>` so it renders as a monospace pill (the `.test-name` class is already defined in the template's CSS).
 
@@ -472,7 +479,7 @@ Wrap any code identifiers inside `{{conclusion}}` in `<code>…</code>` so they 
 After writing the file, end the message with a single line linking to it:
 
 ```
-Report saved to [file:///<absolute-path>/output/fix-<YYYY-MM-DD>-<HHMMSS>.html](file:///<absolute-path>/output/fix-<YYYY-MM-DD>-<HHMMSS>.html)
+Report saved to [file:///<absolute-path>/output/<YYYY-MM-DD>-fix-report.html](file:///<absolute-path>/output/<YYYY-MM-DD>-fix-report.html)
 ```
 
 ## Hard Rules
